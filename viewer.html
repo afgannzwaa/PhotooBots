@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛰️ System Monitor | Live Feed</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #050505;
+            --accent: #00ff9d;
+            --error: #ff3e3e;
+            --panel: #111;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .main-frame {
+            width: 95vw;
+            max-width: 900px;
+            height: 85vh;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #333;
+            background: var(--panel);
+            position: relative;
+            box-shadow: 0 0 50px rgba(0,0,0,1);
+        }
+
+        /* Top Bar */
+        .top-bar {
+            padding: 10px 20px;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            letter-spacing: 2px;
+        }
+
+        .status-tag {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--error);
+            box-shadow: 0 0 10px var(--error);
+        }
+
+        .dot.online {
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent);
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Video Area */
+        .video-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0;
+            transition: opacity 1s ease;
+        }
+
+        video.connected {
+            opacity: 1;
+        }
+
+        /* Decorative Overlay */
+        .overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            border: 20px solid transparent;
+            box-sizing: border-box;
+            background: 
+                linear-gradient(to right, var(--accent) 2px, transparent 2px) 0 0,
+                linear-gradient(to bottom, var(--accent) 2px, transparent 2px) 0 0,
+                linear-gradient(to left, var(--accent) 2px, transparent 2px) 100% 0,
+                linear-gradient(to bottom, var(--accent) 2px, transparent 2px) 100% 0,
+                linear-gradient(to right, var(--accent) 2px, transparent 2px) 0 100%,
+                linear-gradient(to top, var(--accent) 2px, transparent 2px) 0 100%,
+                linear-gradient(to left, var(--accent) 2px, transparent 2px) 100% 100%,
+                linear-gradient(to top, var(--accent) 2px, transparent 2px) 100% 100%;
+            background-repeat: no-repeat;
+            background-size: 20px 20px;
+            opacity: 0.3;
+        }
+
+        .scanline {
+            position: absolute;
+            top: 0;
+            width: 100%;
+            height: 2px;
+            background: rgba(0, 255, 157, 0.1);
+            animation: scan 4s linear infinite;
+        }
+
+        /* Connection Log */
+        .log-panel {
+            padding: 15px 20px;
+            background: #0a0a0a;
+            border-top: 1px solid #333;
+            font-size: 11px;
+            height: 100px;
+            overflow-y: auto;
+            color: #666;
+        }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        @keyframes scan { from { top: 0; } to { top: 100%; } }
+
+        /* Hidden controls for setup */
+        .hidden-config { position: absolute; bottom: 5px; right: 5px; opacity: 0.1; font-size: 8px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="main-frame">
+        <div class="top-bar">
+            <span>SATELLITE_FEED_v4.0</span>
+            <div class="status-tag">
+                <div id="statusDot" class="dot"></div>
+                <span id="statusText">SEARCHING_SIGNAL...</span>
+            </div>
+        </div>
+
+        <div class="video-container">
+            <div class="scanline"></div>
+            <div class="overlay"></div>
+            <video id="remoteVideo" autoplay playsinline></video>
+            <div id="loadingText" style="position: absolute; font-size: 14px;">ESTABLISHING_ENCRYPTED_LINK...</div>
+        </div>
+
+        <div class="log-panel" id="logPanel">
+            > INITIALIZING PEER ENGINE...<br>
+            > CONFIGURING STUN_GOOGLE_RELAY...<br>
+        </div>
+
+        <div class="hidden-config" onclick="changeID()">[CONFIG_ID]</div>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script>
+        const videoEl = document.getElementById('remoteVideo');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const logPanel = document.getElementById('logPanel');
+        const loadingText = document.getElementById('loadingText');
+
+        // ID harus sama dengan yang di index.html
+        let targetId = "booth-undangan-01"; 
+        
+        const peer = new Peer({
+            config: {'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }]}
+        });
+
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString();
+            logPanel.innerHTML += `> [${time}] ${msg}<br>`;
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        peer.on('open', (id) => {
+            addLog("PEER_ENGINE_READY: " + id);
+            autoConnect();
+        });
+
+        function autoConnect() {
+            addLog("TRYING_TO_LINK: " + targetId);
+            const call = peer.call(targetId, new MediaStream());
+
+            call.on('stream', (stream) => {
+                addLog("SIGNAL_LOCKED: RECEIVING_DATA");
+                statusDot.classList.add('online');
+                statusText.innerText = "SATELLITE_CONNECTED";
+                loadingText.style.display = "none";
+                videoEl.srcObject = stream;
+                videoEl.classList.add('connected');
+            });
+
+            call.on('error', (err) => {
+                addLog("LINK_FAILED: RETRYING_IN_3S...");
+                setTimeout(autoConnect, 3000);
+            });
+
+            // Jika dalam 5 detik tidak konek, anggap gagal dan coba lagi
+            setTimeout(() => {
+                if (!videoEl.srcObject) {
+                    addLog("TIMEOUT: RE-SCANNING...");
+                    autoConnect();
+                }
+            }, 7000);
+        }
+
+        function changeID() {
+            const newId = prompt("Enter New Target ID:", targetId);
+            if(newId) { targetId = newId; autoConnect(); }
+        }
+    </script>
+</body>
+</html>
